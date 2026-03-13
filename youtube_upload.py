@@ -83,3 +83,35 @@ if __name__ == "__main__":
     if len(sys.argv) > 2:
         is_short = "short" in sys.argv[1].lower()
         upload(sys.argv[1], sys.argv[2], is_short=is_short)
+
+def create_playlist(name, description):
+    """Maak playlist aan"""
+    yt = get_youtube_service()
+    if not yt: return None
+    
+    body = {
+        "snippet": {
+            "title": name,
+            "description": description
+        },
+        "status": {"privacyStatus": "public"}
+    }
+    
+    response = yt.playlists().insert(part="snippet,status", body=body).execute()
+    return response["id"]
+
+def add_to_playlist(video_id, playlist_id):
+    """Voeg video toe aan playlist"""
+    yt = get_youtube_service()
+    if not yt: return False
+    
+    yt.playlistItems().insert(
+        part="snippet",
+        body={
+            "snippet": {
+                "playlistId": playlist_id,
+                "resourceId": {"kind": "youtube#video", "videoId": video_id}
+            }
+        }
+    ).execute()
+    return True
