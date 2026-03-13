@@ -7,10 +7,10 @@ import requests
 from requests_oauthlib import OAuth1
 
 # Credentials from environment
-CONSUMER_KEY = os.environ.get("X_CONSUMER_KEY", "4DHzgY5szwxKGg1XMG6L84emn")
-CONSUMER_SECRET = os.environ.get("X_CONSUMER_SECRET", "b8czGuw3CVXXo6q7JLNjFyBrGGZg0abDGnIItbNzY6AhdiyCG2")
-ACCESS_TOKEN = os.environ.get("X_ACCESS_TOKEN", "1701510127746965504-60tQ6PdnNfAnmvq8kjyGfSKqwRYnlm")
-ACCESS_SECRET = os.environ.get("X_ACCESS_SECRET", "zfDe9DwaRM0L89kP90WyurSo26XhgOqMUaMeQuxelFieK")
+CONSUMER_KEY = os.environ.get("X_CONSUMER_KEY", os.environ.get("X_CONSUMER_KEY", ""))
+CONSUMER_SECRET = os.environ.get("X_CONSUMER_SECRET", os.environ.get("X_CONSUMER_SECRET", ""))
+ACCESS_TOKEN = os.environ.get("X_ACCESS_TOKEN", os.environ.get("X_ACCESS_TOKEN", ""))
+ACCESS_SECRET = os.environ.get("X_ACCESS_SECRET", os.environ.get("X_ACCESS_SECRET", ""))
 
 auth = OAuth1(CONSUMER_KEY, CONSUMER_SECRET, ACCESS_TOKEN, ACCESS_SECRET)
 
