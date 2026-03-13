@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-YouTube Token Refresh - Volledige toegang
+YouTube + Analytics Token Refresh
 """
 import os
 import pickle
@@ -11,19 +11,27 @@ from google.auth.transport.requests import Request
 CLIENT_SECRET = "client_secret.json"
 TOKEN_FILE = "youtube_token.pkl"
 
-# VOLLEDIGE KANAALBEHEER
+# ALLE SCRAPES - YouTube Data + Analytics
 SCOPES = [
+    # YouTube Data API
     "https://www.googleapis.com/auth/youtube",
-    "https://www.googleapis.com/auth/youtube.upload",
-    "https://www.googleapis.com/auth/youtube.readonly",  
-    "https://www.googleapis.com/auth/youtube.force-ssl"
+    "https://www.googleapis.com/auth/youtube.upload", 
+    "https://www.googleapis.com/auth/youtube.readonly",
+    "https://www.googleapis.com/auth/youtube.force-ssl",
+    # YouTube Analytics API
+    "https://www.googleapis.com/auth/yt-analytics.readonly",
+    "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
+    # Cloud
+    "https://www.googleapis.com/auth/cloud-platform"
 ]
 
 def main():
-    print("YouTube Token Refresh")
-    print("="*40)
+    print("="*50)
+    print("YouTube + Analytics Token Refresh")
+    print("="*50)
     print("Kies Bassiehof kanaal!")
-    print("Accepteer ALLE permissies!")
+    print("Accepteer ALLE permissies die gevraagd worden!")
+    print("="*50)
     
     creds = None
     
@@ -31,11 +39,11 @@ def main():
         with open(TOKEN_FILE, "rb") as f:
             creds = pickle.load(f)
     
-    if creds and creds.expired and creds.refresh_token:
+    if creds and hasattr(creds, 'expired') and creds.expired and creds.refresh_token:
         print("Refreshing...")
         creds.refresh(Request())
     else:
-        print("Starting OAuth...")
+        print("Starting OAuth flow...")
         flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRET, SCOPES)
         creds = flow.run_local_server(port=8080)
     
