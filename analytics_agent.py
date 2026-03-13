@@ -229,3 +229,39 @@ def run_analytics():
 
 if __name__ == "__main__":
     run_analytics()
+
+def calculate_monetization(analysis):
+    """Bereken geschatte inkomsten"""
+    # YouTube ad revenue rough estimate: $3-5 per 1000 views
+    # Long videos = higher CPM (more watch time)
+    
+    long_cpm = 5  # $5 per 1000 views for long
+    short_cpm = 2  # $2 per 1000 views for short
+    
+    total_views = analysis.get("total_views", 0)
+    
+    # Estimate based on duration mix
+    longs = analysis.get("longs_count", 0)
+    shorts = analysis.get("shorts_count", 0)
+    total = longs + shorts
+    
+    if total > 0:
+        long_ratio = longs / total
+        short_ratio = shorts / total
+    else:
+        long_ratio = 0.5
+        short_ratio = 0.5
+    
+    # Estimated revenue
+    long_revenue = (total_views * long_ratio) * (long_cpm / 1000)
+    short_revenue = (total_views * short_ratio) * (short_cpm / 1000)
+    total_revenue = long_revenue + short_revenue
+    
+    return {
+        "long_revenue": round(long_revenue, 2),
+        "short_revenue": round(short_revenue, 2),
+        "total_revenue": round(total_revenue, 2),
+        "long_percentage": round(long_ratio * 100, 1),
+        "short_percentage": round(short_ratio * 100, 1),
+        "recommendation": "more_shorts" if short_revenue > long_revenue else "more_longs"
+    }
