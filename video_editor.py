@@ -107,3 +107,39 @@ if __name__ == "__main__":
     import sys
     if len(sys.argv) > 2:
         enhance_video(sys.argv[1], sys.argv[2])
+
+def add_chapters(video_path, output_path, timestamps):
+    """Voeg chapters toe (voor long video's)"""
+    # Chapters via metadata
+    import tempfile
+    
+    # Dit vereist yt-dlp metadata - placeholder voor nu
+    print(f"Chapters: {timestamps}")
+    return True
+
+def add_end_screen(video_path, output_path):
+    """Voeg end screen toe (laatste 10 sec)"""
+    # Create end screen with subscribe button
+    endscreen = f"/tmp/endscreen_{random.randint(1000,9999)}.mp4"
+    
+    subprocess.run([
+        "ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=black:s=1280x720:d=5",
+        "-vf", """drawtext=text='🔔 Abonneer!':fontsize=60:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2,
+                  drawtext=text='Meer clips op Bassiehof':fontsize=30:fontcolor=gray:x=(w-text_w)/2:y=(h-text_h)/2+80""",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", endscreen
+    ], capture_output=True)
+    
+    # Concatenate
+    concat = f"/tmp/concat_end.txt"
+    with open(concat, 'w') as f:
+        f.write(f"file '{video_path}'\nfile '{endscreen}'")
+    
+    subprocess.run([
+        "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat,
+        "-c", "copy", output_path
+    ], capture_output=True)
+    
+    try: os.remove(endscreen, concat)
+    pass
+    
+    return os.path.exists(output_path)
