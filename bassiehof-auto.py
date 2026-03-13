@@ -159,8 +159,10 @@ def process_clip(video, clip, i):
 # MAIN
 def main():
     log("="*50)
+    log_event("agenda_checked", {})
     log("BASSIEHOF PIPELINE v4 - ANALYTICS OPTIMIZED")
     log("="*50)
+    log_event("agenda_checked", {})
     
     today = datetime.now()
     is_debat_dag = today.weekday() in [1, 2, 3]
@@ -211,3 +213,33 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Telegram notifications
+import os
+
+TELEGRAM_BOT = "8767320369:AAFWGKV5QIUH3t2jueTuTWSh5hGDTdu8CRM"
+TELEGRAM_CHAT = "1523587806"
+
+def telegram(msg):
+    """Stuur Telegram bericht"""
+    import urllib.request, urllib.parse
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT}/sendMessage"
+    data = urllib.parse.urlencode({"chat_id": TELEGRAM_CHAT, "text": msg}).encode()
+    try:
+        urllib.request.urlopen(urllib.request.Request(url, data=data), timeout=10)
+    except:
+        pass
+
+def log_event(event_type, details):
+    """Log event en stuur Telegram"""
+    events = {
+        "agenda_checked": "📅 DebatDirect agenda gechecked",
+        "debate_started": "🎬 Debat gestart met opnemen",
+        "clips_created": "✂️ {count} clips gemaakt",
+        "uploaded": "📤 Video geüpload naar YouTube",
+        "error": "❌ Fout: {error}"
+    }
+    
+    msg = events.get(event_type, event_type).format(**details)
+    log(msg)
+    telegram(msg)
