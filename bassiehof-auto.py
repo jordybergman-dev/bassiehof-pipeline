@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """
-Bassiehof Auto Pipeline - Slimme distributie
-Max 3 long + 5 short per dag
-Rest bewaren voor droge dagen
+Bassiehof Auto Pipeline - Complete
 """
-import os, subprocess, time, ssl, urllib.request, json, pickle
+import os, subprocess, urllib.request, json, pickle
 from datetime import datetime, timedelta
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
@@ -14,11 +12,14 @@ MAX_LONG = 3
 MAX_SHORT = 5
 BASSIEHOF = "/root/bassiehof-pipeline"
 VIDEOS = os.path.join(BASSIEHOF, "Videos")
-QUEUE_FILE = os.path.join(BASE, "upload_queue.json")
+QUEUE_FILE = os.path.join(BASSIEHOF, "upload_queue.json")
 BASE = BASSIEHOF
 DEBATDIRECT_API = "https://cdn.debatdirect.tweedekamer.nl/api"
 
-# Viral keywords
+# SEO
+SEO_TAGS = ["bassiehof", "politiek", "tweedekamer", "nederland", "nieuws",
+            "wilders", "pvv", "debattle", "kamerdebat", "actueel"]
+
 VIRAL_KEYWORDS = {
     "woede":3,"boos":2,"schande":3,"belachelijk":2,"onacceptabel":3,"ramp":3,
     "migratie":2,"asiel":2,"discriminatie":2,"klimaat":2,"pensioen":2,
@@ -27,7 +28,8 @@ VIRAL_KEYWORDS = {
 
 def log(m): print(f"[{datetime.now().strftime('%H:%M:%S')}] {m}")
 
-def get_agenda(datum=None):
+def get_agenda_with_meta(datum=None):
+    """Haal agenda MET metadata"""
     if not datum: datum = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     url = f"{DEBATDIRECT_API}/agenda/{datum}"
     try:
@@ -35,6 +37,29 @@ def get_agenda(datum=None):
         with urllib.request.urlopen(req, timeout=30) as r:
             return json.loads(r.read()).get("debates", [])
     except: return []
+
+def create_seo_description(debat_meta, clip_text):
+    """Maak SEO beschrijving voor long video"""
+    title = debat_meta.get("name", "Debat")
+    category = debat_meta.get("categoryNames", ["Politiek"])[0]
+    debate_type = debat_meta.get("debateType", "Debat")
+    location = debat_meta.get("locationName", "Tweede Kamer")
+    
+    desc = f"""🔥 {title}
+
+📌 Over dit debat:
+• Type: {debate_type}
+• Categorie: {category}
+• Locatie: {location}
+
+💬 In deze clip:
+{clip_text[:200]}
+
+🔔 Abonneer voor meer politieke clips!
+
+#bassiehof #{category.lower().replace(' ','')} #politiek #tweedekamer #nederland #nieuws"""
+    
+    return desc
 
 def ts_to_sec(ts):
     ts = ts.replace(',','.').replace(' ','')
@@ -81,7 +106,7 @@ def analyze_srt(srt_path):
             })
     
     clips = sorted(clips, key=lambda x: x['score'], reverse=True)
-    return clips[:15]  # Max 15 clips per debat
+    return clips[:15]
 
 def load_queue():
     try:
@@ -93,15 +118,14 @@ def save_queue(q):
     with open(QUEUE_FILE, 'w') as f:
         json.dump(q, f)
 
-def create_clickbait_title(clip, is_short=False):
-    """Maak pakkende titel"""
-    text = clip['text'][:50]
+def create_title(clip, is_short=False):
     emotes = ["😱", "🔥", "💯", "👀", "⚡", "🚨"]
     emote = emotes[clip['score'] % len(emotes)]
+    text = clip['text'][:50]
     
     if is_short:
-        return f"{emote} {text} #Shorts #Politiek"
-    return f"{emote} {text} #Bassiehof #Politiek"
+        return f"{emote} {text} #Shorts"
+    return f"🔥 {text}"
 
 def process_clip(video, clip, i):
     naam = f"clip_{i}"
@@ -116,25 +140,52 @@ def process_clip(video, clip, i):
         return raw
     return None
 
+# YouTube upload
+TOKEN_FILE = os.path.join(BASE, "youtube_token.pkl")
+
+def get_yt():
+    creds = None
+    if os.path.exists(TOKEN_FILE):
+        with open(TOKEN_FILE, "rb") as f:
+            creds = pickle.load(f)
+    if creds and creds.valid:
+        return build("youtube", "v3", credentials=creds)
+    return None
+
+def upload_youtube(video_path, title, description, is_short=False):
+    yt = get_yt()
+    if not yt: return False
+    
+    tags = SEO_TAGS.copy()
+    if is_short: tags.extend(["shorts", "ytshorts"])
+    
+    body = {
+        "snippet": {
+            "title": title,
+            "description": description,
+            "tags": tags,
+            "categoryId": "25"
+        },
+        "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}
+    }
+    
+    media = MediaFileUpload(video_path, resumable=True)
+    yt.videos().insert(part="snippet,status", body=body, media_body=media).execute()
+    return True
+
 # MAIN
 def main():
     log("="*50)
-    log("BASSIEHOF AUTO PIPELINE v2")
+    log("BASSIEHOF PIPELINE v3")
     log("="*50)
     
     today = datetime.now()
-    weekday = today.weekday()
-    
-    # Check of het een debate dag is (di, wo, do)
-    is_debat_dag = weekday in [1, 2, 3]
-    
+    is_debat_dag = today.weekday() in [1, 2, 3]
     queue = load_queue()
     
     if is_debat_dag:
-        log("Debat dag! Nieuwe clips verwerken...")
-        
         today_str = today.strftime("%Y-%m-%d")
-        debates = get_agenda(today_str)
+        debates = get_agenda_with_meta(today_str)
         
         long_count = 0
         short_count = 0
@@ -148,15 +199,22 @@ def main():
             
             for i, clip in enumerate(clips, 1):
                 if clip['type'] == 'long' and long_count >= MAX_LONG:
-                    queue['long'].append(clip)  # Bewaren
+                    queue['long'].append({'clip': clip, 'meta': debat})
                     continue
                 if clip['type'] == 'short' and short_count >= MAX_SHORT:
-                    queue['short'].append(clip)  # Bewaren
+                    queue['short'].append({'clip': clip, 'meta': debat})
                     continue
                 
                 result = process_clip(video_file, clip, i)
                 if result:
-                    title = create_clickbait_title(clip, clip['type'] == 'short')
+                    title = create_title(clip, clip['type'] == 'short')
+                    
+                    # Beschrijving voor long videos
+                    if clip['type'] == 'long':
+                        desc = create_seo_description(debat, clip['text'])
+                    else:
+                        desc = f"#{clip['text'][:50]} #Shorts #Bassiehof"
+                    
                     log(f"✅ {clip['type']}: {title[:40]}")
                     
                     if clip['type'] == 'long':
@@ -165,23 +223,7 @@ def main():
                         short_count += 1
         
         save_queue(queue)
-        log(f"Dagelijks limiet: {long_count}/{MAX_LONG} long, {short_count}/{MAX_SHORT} short")
-        log(f"Opgeslagen voor later: {len(queue['long'])} long, {len(queue['short'])} short")
-    
-    else:
-        log("Geen debat dag - controleer queue...")
-        
-        # Upload 1 long en 2 short vanuit queue
-        if queue['long']:
-            clip = queue['long'].pop(0)
-            log(f"📤 Upload long from queue: {clip['text'][:30]}")
-        
-        if len(queue['short']) >= 2:
-            for _ in range(2):
-                clip = queue['short'].pop(0)
-                log(f"📤 Upload short from queue: {clip['text'][:30]}")
-        
-        save_queue(queue)
+        log(f"Long: {long_count}/{MAX_LONG}, Short: {short_count}/{MAX_SHORT}")
     
     log("DONE!")
 
