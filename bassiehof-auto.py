@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Bassiehof Auto Pipeline - Complete
+Bassiehof Auto Pipeline - Analytics Optimized
 """
 import os, subprocess, urllib.request, json, pickle
 from datetime import datetime, timedelta
@@ -16,20 +16,32 @@ QUEUE_FILE = os.path.join(BASSIEHOF, "upload_queue.json")
 BASE = BASSIEHOF
 DEBATDIRECT_API = "https://cdn.debatdirect.tweedekamer.nl/api"
 
+# Load viral keywords
+VIRAL_KEYWORDS = {
+    "woede":5,"boos":4,"schande":5,"belachelijk":3,"onacceptabel":5,"ramp":4,
+    "migratie":3,"asiel":3,"discriminatie":4,"klimaat":3,"pensioen":3,
+    "kabinet":2,"regering":2,"nooit":3,"niemand":3,"verraad":5,"klassejustitie":5,
+    "hakken":5,"sodemieter":5,"weg":3,"wegvaagd":4,"af":3,"kapot":4,
+    "corruptie":5,"schandaal":5,"leugens":4,"bedrog":5,"fake":4,
+    "politie":3,"justitie":3,"rechtsstaat":4,"democratie":3
+}
+
+# Priority politicans - based on analytics
+PRIORITY_POLITICIANS = [
+    "Geert Wilders", "Florian", "Agema", "Gidi Markuszower",
+    "Dion Graus", "Martin Bosma", "Marjolein Faber", "Mona Keijzer",
+    "Caroline van der Plas", "Kati Piri", "Jan Paternotte", "Jesse Klaver",
+    "Stephan van Baarle", "Gideon van Meijeren", "Esther Ouwehand", "Lidewij de Vos"
+]
+POLITICIAN_BONUS = 5
+
 # SEO
 SEO_TAGS = ["bassiehof", "politiek", "tweedekamer", "nederland", "nieuws",
-            "wilders", "pvv", "debattle", "kamerdebat", "actueel"]
-
-VIRAL_KEYWORDS = {
-    "woede":3,"boos":2,"schande":3,"belachelijk":2,"onacceptabel":3,"ramp":3,
-    "migratie":2,"asiel":2,"discriminatie":2,"klimaat":2,"pensioen":2,
-    "kabinet":1,"regering":1,"nooit":2,"niemand":2,"verraad":3,"klassejustitie":3
-}
+            "wilders", "pvv", "bbb", "debattle", "kamerdebat", "actueel", "viral"]
 
 def log(m): print(f"[{datetime.now().strftime('%H:%M:%S')}] {m}")
 
 def get_agenda_with_meta(datum=None):
-    """Haal agenda MET metadata"""
     if not datum: datum = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     url = f"{DEBATDIRECT_API}/agenda/{datum}"
     try:
@@ -39,7 +51,6 @@ def get_agenda_with_meta(datum=None):
     except: return []
 
 def create_seo_description(debat_meta, clip_text):
-    """Maak SEO beschrijving voor long video"""
     title = debat_meta.get("name", "Debat")
     category = debat_meta.get("categoryNames", ["Politiek"])[0]
     debate_type = debat_meta.get("debateType", "Debat")
@@ -74,6 +85,7 @@ def find_srt(vp):
     return None
 
 def analyze_srt(srt_path):
+    """Analytics-optimized clip detection"""
     with open(srt_path, encoding='utf-8', errors='ignore') as f:
         content = f.read()
     
@@ -92,13 +104,20 @@ def analyze_srt(srt_path):
         duration = ts_to_sec(end) - ts_to_sec(start)
         score = 0
         tl = text.lower()
+        
+        # Viral keywords (analytics-based)
         for kw, w in VIRAL_KEYWORDS.items():
             if kw in tl: score += w
         
-        if duration > 60 and len(text) > 200: score += 2
-        if duration < 60 and score >= 2: score += 1
+        # Priority politicians (PVV dominates)
+        for p in PRIORITY_POLITICIANS:
+            if p.lower() in tl: score += POLITICIAN_BONUS
         
-        if score >= 3:
+        # Duration bonuses (short clips work best)
+        if duration < 60 and duration > 30: score += 3  # Optimal shorts
+        if duration > 60 and duration < 300: score += 2  # Good long
+        
+        if score >= 10:  # Higher threshold for quality
             clips.append({
                 'start': start, 'end': end, 'text': text[:100],
                 'score': score, 'duration': duration,
@@ -119,12 +138,9 @@ def save_queue(q):
         json.dump(q, f)
 
 def create_title(clip, is_short=False):
-    emotes = ["😱", "🔥", "💯", "👀", "⚡", "🚨"]
-    emote = emotes[clip['score'] % len(emotes)]
     text = clip['text'][:50]
-    
     if is_short:
-        return f"{emote} {text} #Shorts"
+        return f"🔥 {text} #Shorts"
     return f"🔥 {text}"
 
 def process_clip(video, clip, i):
@@ -140,43 +156,10 @@ def process_clip(video, clip, i):
         return raw
     return None
 
-# YouTube upload
-TOKEN_FILE = os.path.join(BASE, "youtube_token.pkl")
-
-def get_yt():
-    creds = None
-    if os.path.exists(TOKEN_FILE):
-        with open(TOKEN_FILE, "rb") as f:
-            creds = pickle.load(f)
-    if creds and creds.valid:
-        return build("youtube", "v3", credentials=creds)
-    return None
-
-def upload_youtube(video_path, title, description, is_short=False):
-    yt = get_yt()
-    if not yt: return False
-    
-    tags = SEO_TAGS.copy()
-    if is_short: tags.extend(["shorts", "ytshorts"])
-    
-    body = {
-        "snippet": {
-            "title": title,
-            "description": description,
-            "tags": tags,
-            "categoryId": "25"
-        },
-        "status": {"privacyStatus": "public", "publishAt": None, "selfDeclaredMadeForKids": False}
-    }
-    
-    media = MediaFileUpload(video_path, resumable=True)
-    yt.videos().insert(part="snippet,status", body=body, media_body=media).execute()
-    return True
-
 # MAIN
 def main():
     log("="*50)
-    log("BASSIEHOF PIPELINE v3")
+    log("BASSIEHOF PIPELINE v4 - ANALYTICS OPTIMIZED")
     log("="*50)
     
     today = datetime.now()
@@ -209,7 +192,6 @@ def main():
                 if result:
                     title = create_title(clip, clip['type'] == 'short')
                     
-                    # Beschrijving voor long videos
                     if clip['type'] == 'long':
                         desc = create_seo_description(debat, clip['text'])
                     else:
