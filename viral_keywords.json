@@ -1,0 +1,21 @@
+{
+  "keywords": {
+    "woede":5,"boos":4,"schande":5,"belachelijk":3,"onacceptabel":5,"ramp":4,
+    "migratie":3,"asiel":3,"discriminatie":4,"klimaat":3,"pensioen":3,
+    "kabinet":2,"regering":2,"nooit":3,"niemand":3,"verraad":5,"klassejustitie":5,
+    "hakken":5,"sodemieter":5,"weg":3,"wegvaagd":4,"af":3,"kapot":4,
+    "corruptie":5,"schandaal":5,"leugens":4,"bedrog":5,"fake":4,
+    "politie":3,"justitie":3,"rechtsstaat":4,"democratie":3
+  },
+  "topic_bonus": {
+    "zorg":4,
+    "gezondheid":3,
+    "asiel":4,
+    "migratie":3,
+    "klimaat":3,
+    "stikstof":3,
+    "boeren":3,
+    "economie":2,
+    "pensioen":3
+  }
+}
