@@ -243,3 +243,26 @@ def log_event(event_type, details):
     msg = events.get(event_type, event_type).format(**details)
     log(msg)
     telegram(msg)
+
+def check_upcoming_debates():
+    """Check ook de dag erna voor vragenuur"""
+    today = datetime.now()
+    tomorrow = (today + timedelta(days=1)).strftime("%Y-%m-%d")
+    day_after = (today + timedelta(days=2)).strftime("%Y-%m-%d")
+    
+    debates_tomorrow = get_agenda_with_meta(tomorrow)
+    debates_day_after = get_agenda_with_meta(day_after)
+    
+    # Check for vragenuur
+    vragenuur = []
+    for d in debates_tomorrow + debates_day_after:
+        name = d.get("name", "").lower()
+        if "vragenuur" in name or "vragen" in name:
+            vragenuur.append(d)
+    
+    if vragenuur:
+        log(f"📅 Gevonden: {len(vragenuur)} vragenuur debat(ten)!")
+        for v in vragenuur:
+            log(f"   - {v.get('name')} op {v.get('debateDate')}")
+    
+    return vragenuur
