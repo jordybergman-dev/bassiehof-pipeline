@@ -217,7 +217,7 @@ if __name__ == "__main__":
 # Telegram notifications
 import os
 
-TELEGRAM_BOT = "${TELEGRAM_BOT}"
+TELEGRAM_BOT = os.environ.get("TELEGRAM_BOT", "")
 TELEGRAM_CHAT = "1523587806"
 
 def telegram(msg):
