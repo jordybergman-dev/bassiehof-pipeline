@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 """
-Bassiehof Auto Pipeline - met slimme clip detectie
+Bassiehof Auto Pipeline - Slimme distributie
+Max 3 long + 5 short per dag
+Rest bewaren voor droge dagen
 """
-import os, subprocess, time, ssl, urllib.request, urllib.parse, json, pickle
+import os, subprocess, time, ssl, urllib.request, json, pickle
 from datetime import datetime, timedelta
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # CONFIG
+MAX_LONG = 3
+MAX_SHORT = 5
 BASSIEHOF = "/root/bassiehof-pipeline"
 VIDEOS = os.path.join(BASSIEHOF, "Videos")
+QUEUE_FILE = os.path.join(BASE, "upload_queue.json")
 BASE = BASSIEHOF
 DEBATDIRECT_API = "https://cdn.debatdirect.tweedekamer.nl/api"
-TELEGRAM_BOT = os.environ.get("TELEGRAM_BOT")
-TELEGRAM_CHAT = os.environ.get("TELEGRAM_CHAT")
-CLIENT_SECRETS = os.path.join(BASE, "client_secret.json")
-TOKEN_FILE = os.path.join(BASE, "youtube_token.pkl")
-SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 # Viral keywords
 VIRAL_KEYWORDS = {
@@ -27,26 +27,6 @@ VIRAL_KEYWORDS = {
 
 def log(m): print(f"[{datetime.now().strftime('%H:%M:%S')}] {m}")
 
-def telegram(m):
-    if not TELEGRAM_BOT: return
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT}/sendMessage"
-    data = urllib.parse.urlencode({"chat_id": TELEGRAM_CHAT, "text": m}).encode()
-    try: urllib.request.urlopen(urllib.request.Request(url, data=data), timeout=10)
-    except: pass
-
-def run_cmd(cmd):
-    log(f"CMD: {cmd}")
-    r = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    if r.returncode != 0:
-        log(f"ERR: {r.stderr[:100]}")
-        return False
-    return True
-
-def ts_to_sec(ts):
-    ts = ts.replace(',','.').replace(' ','')
-    p = ts.split(':')
-    return int(p[0])*3600 + int(p[1])*60 + float(p[2])
-
 def get_agenda(datum=None):
     if not datum: datum = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     url = f"{DEBATDIRECT_API}/agenda/{datum}"
@@ -56,6 +36,11 @@ def get_agenda(datum=None):
             return json.loads(r.read()).get("debates", [])
     except: return []
 
+def ts_to_sec(ts):
+    ts = ts.replace(',','.').replace(' ','')
+    p = ts.split(':')
+    return int(p[0])*3600 + int(p[1])*60 + float(p[2])
+
 def find_srt(vp):
     base = os.path.splitext(vp)[0]
     for ext in ['.nl.srt', '.srt']:
@@ -64,7 +49,6 @@ def find_srt(vp):
     return None
 
 def analyze_srt(srt_path):
-    """Analyseer transcript voor viral clips - shorts EN longs"""
     with open(srt_path, encoding='utf-8', errors='ignore') as f:
         content = f.read()
     
@@ -80,26 +64,14 @@ def analyze_srt(srt_path):
         text = ' '.join(lines[2:]).strip()
         if not text: continue
         
-        # Bereken duration
         duration = ts_to_sec(end) - ts_to_sec(start)
-        
-        # Viral score
         score = 0
         tl = text.lower()
         for kw, w in VIRAL_KEYWORDS.items():
-            # Bonus voor priority politici
-            for p in PRIORITY_POLITICIANS:
-                if p.lower() in tl:
-                    score += POLITICIAN_BONUS
             if kw in tl: score += w
         
-        # Lange speeches = interrupties = goed voor long video
-        if duration > 60 and len(text) > 200:
-            score += 2  # Bonus voor lange speeches
-        
-        # Korte impactvolle momenten = shorts
-        if duration < 60 and score >= 2:
-            score += 1
+        if duration > 60 and len(text) > 200: score += 2
+        if duration < 60 and score >= 2: score += 1
         
         if score >= 3:
             clips.append({
@@ -108,20 +80,28 @@ def analyze_srt(srt_path):
                 'type': 'short' if duration < 60 else 'long'
             })
     
-    # Merge nearby clips
-    clips = sorted(clips, key=lambda x: ts_to_sec(x['start']))
-    merged = []
-    for c in clips:
-        if merged and ts_to_sec(c['start']) - ts_to_sec(merged[-1]['end']) < 10:
-            merged[-1]['end'] = c['end']
-            merged[-1]['text'] += " " + c['text']
-            merged[-1]['duration'] = ts_to_sec(merged[-1]['end']) - ts_to_sec(merged[-1]['start'])
-            merged[-1]['score'] = max(merged[-1]['score'], c['score'])
-        else:
-            merged.append(c)
+    clips = sorted(clips, key=lambda x: x['score'], reverse=True)
+    return clips[:15]  # Max 15 clips per debat
+
+def load_queue():
+    try:
+        with open(QUEUE_FILE) as f:
+            return json.load(f)
+    except: return {"long": [], "short": []}
+
+def save_queue(q):
+    with open(QUEUE_FILE, 'w') as f:
+        json.dump(q, f)
+
+def create_clickbait_title(clip, is_short=False):
+    """Maak pakkende titel"""
+    text = clip['text'][:50]
+    emotes = ["😱", "🔥", "💯", "👀", "⚡", "🚨"]
+    emote = emotes[clip['score'] % len(emotes)]
     
-    # Sort by score
-    return sorted(merged, key=lambda x: x['score'], reverse=True)[:5]
+    if is_short:
+        return f"{emote} {text} #Shorts #Politiek"
+    return f"{emote} {text} #Bassiehof #Politiek"
 
 def process_clip(video, clip, i):
     naam = f"clip_{i}"
@@ -130,99 +110,80 @@ def process_clip(video, clip, i):
     end = clip['end'].replace(',','.')
     
     cmd = f'ffmpeg -y -i "{video}" -ss {start} -to {end} -c copy "{raw}"'
-    if run_cmd(cmd):
+    subprocess.run(cmd, shell=True, capture_output=True)
+    
+    if os.path.exists(raw):
         return raw
     return None
-
-def upload_youtube(video_path, title, is_short=False):
-    import google.auth
-    creds = None
-    if os.path.exists(TOKEN_FILE):
-        with open(TOKEN_FILE, "rb") as f:
-            creds = pickle.load(f)
-    if not creds or not creds.valid: return False
-    
-    yt = build("youtube", "v3", credentials=creds)
-    body = {
-        "snippet": {"title": title, "description": "#bassiehof #politiek #tweedekamer", "categoryId": "25"},
-        "status": {"privacyStatus": "unlisted"}
-    }
-    media = MediaFileUpload(video_path, resumable=True)
-    yt.videos().insert(part="snippet,status", body=body, media_body=media).execute()
-    log(f"Uploaded: {title}")
-    return True
-
-def upload_drive(filename):
-    cmd = f'rclone copy "{VIDEOS}/{filename}" "gdrive videos:/videos/"'
-    run_cmd(cmd)
 
 # MAIN
 def main():
     log("="*50)
-    log("BASSIEHOF AUTO PIPELINE")
+    log("BASSIEHOF AUTO PIPELINE v2")
     log("="*50)
     
-    telegram("🚀 Pipeline gestart!")
+    today = datetime.now()
+    weekday = today.weekday()
     
-    # Check today
-    today = datetime.now().strftime("%Y-%m-%d")
-    debates = get_agenda(today)
+    # Check of het een debate dag is (di, wo, do)
+    is_debat_dag = weekday in [1, 2, 3]
     
-    if not debates:
-        log("Geen debatten vandaag")
-        telegram("📅 Geen debatten vandaag")
-        return
+    queue = load_queue()
     
-    for debat in debates:
-        name = debat.get('name', 'Onbekend')
-        log(f"Debat: {name}")
+    if is_debat_dag:
+        log("Debat dag! Nieuwe clips verwerken...")
         
-        # Download
-        video_file = os.path.join(VIDEOS, f"debat_{today}.mp4")
-        if not os.path.exists(video_file):
-            stream = f"https://livestreaming.b67buv2.tweedekamer.nl/{today}/{debat.get('locationId','plenairezaal')}/stream_05/prog_index.m3u8"
-            log(f"Downloading: {stream}")
-            if run_cmd(f"ffmpeg -y -i {stream} -t 7200 -c copy {video_file}"):
-                telegram("📥 Video gedownload!")
+        today_str = today.strftime("%Y-%m-%d")
+        debates = get_agenda(today_str)
         
-        # Analyze
-        srt = find_srt(video_file)
-        if not srt: continue
+        long_count = 0
+        short_count = 0
         
-        clips = analyze_srt(srt)
-        log(f"Gevonden: {len(clips)} clips")
-        
-        telegram(f"🤖 {len(clips)} clips gevonden!")
-        
-        for i, clip in enumerate(clips, 1):
-            result = process_clip(video_file, clip, i)
-            if result:
-                is_short = clip['type'] == 'short'
-                title = f"🔥 {clip['text'][:50]}"
-                if is_short: title += " #Shorts"
+        for debat in debates:
+            video_file = os.path.join(VIDEOS, f"debat_{today_str}.mp4")
+            srt = find_srt(video_file)
+            if not srt: continue
+            
+            clips = analyze_srt(srt)
+            
+            for i, clip in enumerate(clips, 1):
+                if clip['type'] == 'long' and long_count >= MAX_LONG:
+                    queue['long'].append(clip)  # Bewaren
+                    continue
+                if clip['type'] == 'short' and short_count >= MAX_SHORT:
+                    queue['short'].append(clip)  # Bewaren
+                    continue
                 
-                upload_youtube(result, title, is_short)
-                upload_drive(os.path.basename(result))
-                
-                telegram(f"✅ Clip {i} ({clip['type']}): {title[:30]}...")
+                result = process_clip(video_file, clip, i)
+                if result:
+                    title = create_clickbait_title(clip, clip['type'] == 'short')
+                    log(f"✅ {clip['type']}: {title[:40]}")
+                    
+                    if clip['type'] == 'long':
+                        long_count += 1
+                    else:
+                        short_count += 1
+        
+        save_queue(queue)
+        log(f"Dagelijks limiet: {long_count}/{MAX_LONG} long, {short_count}/{MAX_SHORT} short")
+        log(f"Opgeslagen voor later: {len(queue['long'])} long, {len(queue['short'])} short")
     
-    telegram("✅ Pipeline klaar!")
+    else:
+        log("Geen debat dag - controleer queue...")
+        
+        # Upload 1 long en 2 short vanuit queue
+        if queue['long']:
+            clip = queue['long'].pop(0)
+            log(f"📤 Upload long from queue: {clip['text'][:30]}")
+        
+        if len(queue['short']) >= 2:
+            for _ in range(2):
+                clip = queue['short'].pop(0)
+                log(f"📤 Upload short from queue: {clip['text'][:30]}")
+        
+        save_queue(queue)
+    
     log("DONE!")
 
 if __name__ == "__main__":
     main()
-
-# Load priority politicians
-def load_politicians():
-    try:
-        with open(os.path.join(BASE, "politicians.json")) as f:
-            data = json.load(f)
-            return data.get("priority_politicians", []), data.get("bonus_score", 3)
-    except:
-        return [], 0
-
-# Add politician bonus to scoring
-PRIORITY_POLITICIANS, POLITICIAN_BONUS = load_politicians()
-
-# Update analyze_srt to use politician bonus
-# (adds bonus score when these politicians are mentioned)
