@@ -1,28 +1,27 @@
 #!/usr/bin/env python3
 """
-Video Branding - Logo toevoegen aan video's
+Video Branding - Bassiehof Logo toevoegen
+- Long video: rechtsboven
+- Shorts: linksboven
 """
 import subprocess
-import os
 
 def add_logo(video_input, video_output, logo_path, is_short=False):
     """
-    Voeg logo toe aan video
-    is_short: True voor 9:16, False voor 16:9
+    Voeg Bassiehof logo toe
+    is_short: True voor 9:16 (Shorts), False voor 16:9 (long)
     """
     if is_short:
-        # 9:16 formaat (Shorts/Reels)
-        # Crop naar 9:16 en voeg logo toe
+        # Shorts: 9:16 formaat met logo linksboven
         filter_complex = (
-            "[0:v]crop=ih*9/16:ih:(iw-ih*9/16)/2:0,scale=1080:1920[main];"
-            "[1:v]scale=200:-1[logo];"
-            "[main][logo]overlay=20:20[v]"
+            "[0:v]scale=1080:1920[main];"
+            "[1:v]scale=150:-1[logo];"
+            "[main][logo]overlay=20:20[v]"  # Linksboven
         )
     else:
-        # 16:9 formaat (YouTube long)
+        # Long: 16:9 formaat met logo rechtsboven
         filter_complex = (
-            "[1:v]scale=120:-1[logo];"
-            "[0:v][logo]overlay=W-w-20:20[v]"
+            "[0:v][1:v]overlay=W-w-20:20[v]"  # Rechtsboven
         )
     
     cmd = [
