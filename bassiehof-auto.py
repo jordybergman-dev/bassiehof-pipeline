@@ -87,6 +87,10 @@ def analyze_srt(srt_path):
         score = 0
         tl = text.lower()
         for kw, w in VIRAL_KEYWORDS.items():
+            # Bonus voor priority politici
+            for p in PRIORITY_POLITICIANS:
+                if p.lower() in tl:
+                    score += POLITICIAN_BONUS
             if kw in tl: score += w
         
         # Lange speeches = interrupties = goed voor long video
@@ -207,3 +211,18 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Load priority politicians
+def load_politicians():
+    try:
+        with open(os.path.join(BASE, "politicians.json")) as f:
+            data = json.load(f)
+            return data.get("priority_politicians", []), data.get("bonus_score", 3)
+    except:
+        return [], 0
+
+# Add politician bonus to scoring
+PRIORITY_POLITICIANS, POLITICIAN_BONUS = load_politicians()
+
+# Update analyze_srt to use politician bonus
+# (adds bonus score when these politicians are mentioned)
