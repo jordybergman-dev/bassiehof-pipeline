@@ -77,3 +77,19 @@ if __name__ == "__main__":
     p.add_argument("--video")
     a = p.parse_args()
     if a.video: main(a.video)
+
+def upload_to_drive(local_path, drive_folder="videos"):
+    """Upload file to Google Drive"""
+    import subprocess
+    drive_name = "gdrive videos"
+    remote_path = f"{drive_name}:/{drive_folder}"
+    log(f"Uploading to Drive: {local_path}")
+    result = subprocess.run(
+        ["rclone", "copy", local_path, remote_path],
+        capture_output=True, text=True
+    )
+    if result.returncode == 0:
+        log(f"✅ Uploaded: {local_path}")
+        return True
+    log(f"❌ Upload failed: {result.stderr}")
+    return False
