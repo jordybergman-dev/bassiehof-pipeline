@@ -11,8 +11,9 @@ from google.auth.transport.requests import Request
 CLIENT_SECRET = "client_secret.json"
 TOKEN_FILE = "youtube_token.pkl"
 
-# ALLE SCRAPES - dit is belangrijk!
+# VOLLEDIGE KANAALBEHEER
 SCOPES = [
+    "https://www.googleapis.com/auth/youtube",
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",  
     "https://www.googleapis.com/auth/youtube.force-ssl"
@@ -21,7 +22,8 @@ SCOPES = [
 def main():
     print("YouTube Token Refresh")
     print("="*40)
-    print("Let op: Accepteer ALLE permissies in de browser!")
+    print("Kies Bassiehof kanaal!")
+    print("Accepteer ALLE permissies!")
     
     creds = None
     
@@ -33,8 +35,7 @@ def main():
         print("Refreshing...")
         creds.refresh(Request())
     else:
-        print("Starting OAuth flow...")
-        print("Kies je YouTube kanaal en accepteer ALLE permissies!")
+        print("Starting OAuth...")
         flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRET, SCOPES)
         creds = flow.run_local_server(port=8080)
     
