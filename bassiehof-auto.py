@@ -166,7 +166,7 @@ def upload_youtube(video_path, title, description, is_short=False):
             "tags": tags,
             "categoryId": "25"
         },
-        "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}
+        "status": {"privacyStatus": "public", "publishAt": None, "selfDeclaredMadeForKids": False}
     }
     
     media = MediaFileUpload(video_path, resumable=True)
